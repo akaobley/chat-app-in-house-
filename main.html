@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Relay — send between devices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#11151c;
+    --panel:#1a2029;
+    --panel-2:#20272f;
+    --border:#2c3440;
+    --text:#e8e6e1;
+    --muted:#818b99;
+    --accent:#ff7a45;
+    --accent-soft:#3a2a22;
+    --accent2:#5eead4;
+    --accent2-soft:#1e3330;
+    --radius:12px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-body:'Inter', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    max-width:720px;
+    margin:0 auto;
+    padding:18px 16px 60px;
+  }
+
+  /* ---------- header ---------- */
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:14px 16px;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    margin-bottom:16px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .brand-mark{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:20px;
+    letter-spacing:0.06em;
+  }
+  .brand-mark span{ color:var(--accent); }
+  .conn-info{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--muted);
+    text-align:right;
+    line-height:1.5;
+  }
+  .conn-info b{ color:var(--text); font-weight:500; letter-spacing:0.08em; }
+  .conn-info .change{
+    color:var(--accent2);
+    cursor:pointer;
+    text-decoration:underline;
+    text-decoration-style:dotted;
+    font-family:var(--font-body);
+  }
+
+  /* signal viz */
+  .signal{
+    width:84px; height:28px; flex:0 0 auto;
+  }
+  .signal .dash{
+    stroke:var(--border);
+    stroke-width:2;
+    stroke-dasharray:4 5;
+  }
+  .signal .node{ fill:var(--panel-2); stroke:var(--border); stroke-width:1.5; }
+  .signal .pulse{
+    fill:var(--accent);
+    opacity:0;
+  }
+  .signal.live .pulse{
+    animation: travel 1.1s ease-in-out;
+  }
+  .signal .ring{
+    fill:none; stroke:var(--accent2); stroke-width:1.5; opacity:0;
+  }
+  .signal.connected .ring{ opacity:0.55; animation: glow 2.6s ease-in-out infinite; }
+  @keyframes travel{
+    0%{ opacity:0; transform:translateX(0px); }
+    10%{ opacity:1; }
+    90%{ opacity:1; }
+    100%{ opacity:0; transform:translateX(58px); }
+  }
+  @keyframes glow{
+    0%,100%{ opacity:0.25; }
+    50%{ opacity:0.65; }
+  }
+
+  /* ---------- setup overlay ---------- */
+  .setup{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:24px 20px;
+    margin-bottom:16px;
+  }
+  .setup h1{
+    font-family:var(--font-display);
+    font-size:22px;
+    margin:0 0 6px;
+  }
+  .setup p{
+    color:var(--muted);
+    font-size:14px;
+    line-height:1.6;
+    margin:0 0 18px;
+  }
+  .field{
+    margin-bottom:14px;
+  }
+  .field label{
+    display:block;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  .field input{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    color:var(--text);
+    font-family:var(--font-mono);
+    font-size:15px;
+    padding:11px 12px;
+    outline:none;
+  }
+  .field input:focus{ border-color:var(--accent2); }
+  .field .hint{ font-size:12px; color:var(--muted); margin-top:6px; font-family:var(--font-body); }
+
+  .btn{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:14px;
+    border:none;
+    border-radius:8px;
+    padding:11px 18px;
+    cursor:pointer;
+    transition:transform 0.08s ease, opacity 0.15s ease;
+  }
+  .btn:active{ transform:scale(0.98); }
+  .btn-primary{ background:var(--accent); color:#1a1208; }
+  .btn-secondary{ background:var(--panel-2); color:var(--text); border:1px solid var(--border); }
+  .btn-ghost{ background:transparent; color:var(--accent2); border:1px solid var(--accent2-soft); }
+  .btn:disabled{ opacity:0.45; cursor:default; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+
+  /* ---------- tabs ---------- */
+  .tabs{
+    display:flex;
+    gap:6px;
+    margin-bottom:14px;
+    border-bottom:1px solid var(--border);
+  }
+  .tab{
+    font-family:var(--font-display);
+    font-weight:500;
+    font-size:14px;
+    letter-spacing:0.04em;
+    color:var(--muted);
+    background:none;
+    border:none;
+    padding:10px 4px 12px;
+    cursor:pointer;
+    border-bottom:2px solid transparent;
+    margin-right:18px;
+  }
+  .tab.active{ color:var(--text); border-bottom-color:var(--accent); }
+
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+
+  /* ---------- transfer ---------- */
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:16px;
+  }
+  .card h2{
+    font-family:var(--font-display);
+    font-size:15px;
+    margin:0 0 12px;
+    letter-spacing:0.03em;
+  }
+  textarea{
+    width:100%;
+    min-height:80px;
+    resize:vertical;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    color:var(--text);
+    font-family:var(--font-body);
+    font-size:14px;
+    padding:12px;
+    outline:none;
+    margin-bottom:10px;
+  }
+  textarea:focus{ border-color:var(--accent2); }
+
+  .dropzone{
+    border:1.5px dashed var(--border);
+    border-radius:8px;
+    padding:22px 14px;
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+    margin-top:12px;
+    transition:border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone.drag{ border-color:var(--accent2); background:var(--accent2-soft); color:var(--text); }
+  .dropzone .links{ margin-top:10px; }
+  .dropzone .links span{
+    color:var(--accent2);
+    cursor:pointer;
+    text-decoration:underline;
+    text-decoration-style:dotted;
+  }
+
+  /* activity list */
+  .activity-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:10px;
+  }
+  .activity-head h2{ margin:0; }
+  .item{
+    display:flex;
+    gap:12px;
+    padding:12px 0;
+    border-top:1px solid var(--border);
+  }
+  .item:first-child{ border-top:none; }
+  .item-icon{
+    width:34px; height:34px; flex:0 0 34px;
+    border-radius:8px;
+    background:var(--panel-2);
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px;
+    border:1px solid var(--border);
+  }
+  .item-icon img{ width:100%; height:100%; object-fit:cover; border-radius:8px; }
+  .item-body{ flex:1; min-width:0; }
+  .item-name{
+    font-size:14px;
+    font-weight:500;
+    word-break:break-word;
+    margin-bottom:2px;
+  }
+  .item-name.text-preview{
+    font-family:var(--font-body);
+    color:var(--text);
+    white-space:pre-wrap;
+    font-weight:400;
+  }
+  .item-meta{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--muted);
+  }
+  .item-meta .from-you{ color:var(--accent); }
+  .item-meta .from-them{ color:var(--accent2); }
+  .item-actions{
+    display:flex; flex-direction:column; gap:6px; flex:0 0 auto;
+  }
+  .icon-btn{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:6px;
+    font-size:12px;
+    font-family:var(--font-body);
+    padding:6px 10px;
+    cursor:pointer;
+    text-decoration:none;
+    text-align:center;
+    white-space:nowrap;
+  }
+  .icon-btn:hover{ border-color:var(--accent2); }
+  .icon-btn.danger:hover{ border-color:var(--accent); }
+  .empty{
+    color:var(--muted);
+    font-size:13px;
+    text-align:center;
+    padding:24px 8px;
+  }
+
+  /* ---------- chat ---------- */
+  .chat-window{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px;
+    height:380px;
+    overflow-y:auto;
+    margin-bottom:12px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .bubble{
+    max-width:78%;
+    padding:9px 12px;
+    border-radius:12px;
+    font-size:14px;
+    line-height:1.45;
+    word-break:break-word;
+  }
+  .bubble .meta{
+    display:block;
+    font-family:var(--font-mono);
+    font-size:10px;
+    margin-top:4px;
+    opacity:0.6;
+  }
+  .bubble.mine{
+    align-self:flex-end;
+    background:var(--accent-soft);
+    border:1px solid var(--accent);
+    border-bottom-right-radius:4px;
+  }
+  .bubble.theirs{
+    align-self:flex-start;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-bottom-left-radius:4px;
+  }
+  .bubble.theirs .meta{ color:var(--accent2); opacity:0.9; }
+  .chat-input{
+    display:flex;
+    gap:8px;
+  }
+  .chat-input input{
+    flex:1;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    color:var(--text);
+    font-family:var(--font-body);
+    font-size:14px;
+    padding:11px 12px;
+    outline:none;
+  }
+  .chat-input input:focus{ border-color:var(--accent2); }
+
+  .footnote{
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    margin-top:18px;
+    line-height:1.6;
+  }
+  .footnote b{ color:var(--text); }
+
+  @media (prefers-reduced-motion: reduce){
+    .signal.live .pulse, .signal.connected .ring{ animation:none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">REL<span>AY</span></div>
+      <svg class="signal" id="signalViz" viewBox="0 0 84 28" xmlns="http://www.w3.org/2000/svg">
+        <line class="dash" x1="14" y1="14" x2="70" y2="14"/>
+        <circle class="ring" cx="14" cy="14" r="9"/>
+        <circle class="ring" cx="70" cy="14" r="9"/>
+        <rect class="node" x="8" y="6" width="12" height="16" rx="2"/>
+        <rect class="node" x="62" y="4" width="16" height="20" rx="2"/>
+        <circle class="pulse" cx="14" cy="14" r="3.5"/>
+      </svg>
+    </div>
+    <div class="conn-info" id="connInfo"></div>
+  </header>
+
+  <!-- SETUP -->
+  <div class="setup" id="setup">
+    <h1>Connect this device</h1>
+    <p>Pick a room code and use the <b>same code on both devices</b> — phone and desktop. Anything sent in this room shows up on every device using it, so don't reuse a code someone else might guess.</p>
+    <div class="field">
+      <label for="roomInput">Room code</label>
+      <input id="roomInput" type="text" placeholder="e.g. orange-fox-42" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="hint">Type a code yourself, or generate one and share it with your other device.</div>
+    </div>
+    <div class="field">
+      <label for="nameInput">This device's name</label>
+      <input id="nameInput" type="text" placeholder="e.g. Phone or Desktop" autocomplete="off">
+    </div>
+    <div class="row">
+      <button class="btn btn-primary" id="connectBtn">Connect</button>
+      <button class="btn btn-secondary" id="generateBtn">Generate a code</button>
+    </div>
+  </div>
+
+  <!-- MAIN UI -->
+  <div id="mainUI" style="display:none;">
+    <div class="tabs">
+      <button class="tab active" data-tab="transfer">Transfer</button>
+      <button class="tab" data-tab="chat">Chat</button>
+    </div>
+
+    <!-- TRANSFER PANEL -->
+    <div class="panel active" id="panel-transfer">
+      <div class="card">
+        <h2>Send something</h2>
+        <textarea id="textInput" placeholder="Paste or type text — links, codes, notes…"></textarea>
+        <div class="row">
+          <button class="btn btn-primary" id="sendTextBtn">Send text</button>
+        </div>
+        <div class="dropzone" id="dropzone">
+          Drop files or a folder here<br>
+          <div class="links">
+            or <span id="pickFiles">choose files</span> · <span id="pickFolder">choose a folder</span>
+          </div>
+        </div>
+        <input type="file" id="fileInput" multiple style="display:none">
+        <input type="file" id="folderInput" multiple webkitdirectory style="display:none">
+        <div class="hint" id="uploadHint" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="activity-head">
+          <h2>Shared items</h2>
+          <button class="btn-ghost btn" id="refreshBtn" style="padding:6px 12px; font-size:12px;">Refresh</button>
+        </div>
+        <div id="itemsList"><div class="empty">Nothing shared yet. Send text or a file from either device.</div></div>
+      </div>
+    </div>
+
+    <!-- CHAT PANEL -->
+    <div class="panel" id="panel-chat">
+      <div class="chat-window" id="chatWindow">
+        <div class="empty">No messages yet — say hello.</div>
+      </div>
+      <div class="chat-input">
+        <input id="chatInput" type="text" placeholder="Message…" autocomplete="off">
+        <button class="btn btn-primary" id="chatSendBtn">Send</button>
+      </div>
+    </div>
+
+    <div class="footnote">
+      Connected as <b id="footName"></b> in room <b id="footRoom"></b>.
+      Files are limited to ~3.5MB each (browser storage limit). For larger files, share a link via chat instead.
+      <br><span class="change" id="changeConn" style="color:var(--accent2); cursor:pointer; text-decoration:underline dotted;">Disconnect / change room</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ---------- state ----------
+  let ROOM = '';
+  let NAME = '';
+  const itemsCache = {};   // key -> parsed item
+  const chatCache = {};    // key -> parsed message
+  let pollTimer = null;
+  const MAX_FILE_BYTES = 3.5 * 1024 * 1024;
+
+  const el = id => document.getElementById(id);
+
+  // ---------- helpers ----------
+  function genCode(){
+    const adjectives = ['orange','silver','quiet','rapid','amber','lunar','violet','copper','cedar','coral'];
+    const nouns = ['fox','river','comet','harbor','maple','falcon','delta','quartz','willow','otter'];
+    const a = adjectives[Math.floor(Math.random()*adjectives.length)];
+    const n = nouns[Math.floor(Math.random()*nouns.length)];
+    const num = Math.floor(Math.random()*90)+10;
+    return `${a}-${n}-${num}`;
+  }
+
+  function formatBytes(bytes){
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  }
+
+  function formatTime(ts){
+    const d = new Date(ts);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const time = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    return sameDay ? time : d.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + time;
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function triggerSignal(){
+    const sig = el('signalViz');
+    sig.classList.remove('live');
+    // restart animation
+    void sig.offsetWidth;
+    sig.classList.add('live');
+  }
+
+  // ---------- personal config (per-device, not shared) ----------
+  async function loadConfig(){
+    try{
+      const r = await window.storage.get('cfg:room', false);
+      const n = await window.storage.get('cfg:name', false);
+      if (r && r.value && n && n.value){
+        ROOM = r.value; NAME = n.value;
+        return true;
+      }
+    }catch(e){ /* no config yet */ }
+    return false;
+  }
+
+  async function saveConfig(room, name){
+    try{
+      await window.storage.set('cfg:room', room, false);
+      await window.storage.set('cfg:name', name, false);
+    }catch(e){ console.error('Could not save config', e); }
+  }
+
+  // ---------- connection screen ----------
+  el('generateBtn').addEventListener('click', () => {
+    el('roomInput').value = genCode();
+  });
+
+  el('connectBtn').addEventListener('click', async () => {
+    const room = el('roomInput').value.trim().toLowerCase().replace(/\s+/g,'-');
+    const name = el('nameInput').value.trim();
+    if (!room || !name){
+      el('uploadHint').textContent = '';
+      alert('Enter both a room code and a name for this device.');
+      return;
+    }
+    ROOM = room; NAME = name;
+    await saveConfig(ROOM, NAME);
+    startApp();
+  });
+
+  el('changeConn').addEventListener('click', async () => {
+    if (pollTimer) clearInterval(pollTimer);
+    el('mainUI').style.display = 'none';
+    el('setup').style.display = 'block';
+    el('roomInput').value = ROOM;
+    el('nameInput').value = NAME;
+    el('signalViz').classList.remove('connected');
+  });
+
+  // ---------- tabs ----------
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      el('panel-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'chat') scrollChatToBottom();
+    });
+  });
+
+  // ---------- starting the app ----------
+  function startApp(){
+    el('setup').style.display = 'none';
+    el('mainUI').style.display = 'block';
+    el('connInfo').innerHTML = `<b>${escapeHtml(NAME)}</b><br>room: ${escapeHtml(ROOM)}`;
+    el('footName').textContent = NAME;
+    el('footRoom').textContent = ROOM;
+    el('signalViz').classList.add('connected');
+
+    poll();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(poll, 3000);
+  }
+
+  // ---------- polling ----------
+  async function poll(){
+    if (!ROOM) return;
+    try{
+      const itemsList = await window.storage.list(`r:${ROOM}:item:`, true);
+      if (itemsList && itemsList.keys){
+        let added = false;
+        for (const k of itemsList.keys){
+          if (!(k in itemsCache)){
+            try{
+              const res = await window.storage.get(k, true);
+              if (res && res.value){
+                itemsCache[k] = JSON.parse(res.value);
+                added = true;
+              }
+            }catch(e){ /* ignore single-key errors */ }
+          }
+        }
+        if (added){ renderItems(); triggerSignal(); }
+      }
+    }catch(e){ /* room may have no items yet */ }
+
+    try{
+      const chatList = await window.storage.list(`r:${ROOM}:chat:`, true);
+      if (chatList && chatList.keys){
+        let added = false;
+        for (const k of chatList.keys){
+          if (!(k in chatCache)){
+            try{
+              const res = await window.storage.get(k, true);
+              if (res && res.value){
+                chatCache[k] = JSON.parse(res.value);
+                added = true;
+              }
+            }catch(e){ /* ignore */ }
+          }
+        }
+        if (added){ renderChat(); triggerSignal(); }
+      }
+    }catch(e){ /* room may have no messages yet */ }
+  }
+
+  // ---------- rendering: items ----------
+  function renderItems(){
+    const entries = Object.entries(itemsCache).sort((a,b) => b[1].time - a[1].time);
+    const container = el('itemsList');
+    if (entries.length === 0){
+      container.innerHTML = '<div class="empty">Nothing shared yet. Send text or a file from either device.</div>';
+      return;
+    }
+    container.innerHTML = '';
+    for (const [key, item] of entries){
+      const div = document.createElement('div');
+      div.className = 'item';
+
+      const fromLabel = item.sender === NAME
+        ? `<span class="from-you">you</span>`
+        : `<span class="from-them">${escapeHtml(item.sender)}</span>`;
+
+      let iconHtml, bodyHtml, actionsHtml;
+
+      if (item.type === 'text'){
+        iconHtml = `<div class="item-icon">⌘</div>`;
+        const preview = item.content.length > 240 ? item.content.slice(0,240) + '…' : item.content;
+        bodyHtml = `<div class="item-name text-preview">${escapeHtml(preview)}</div>
+                    <div class="item-meta">${fromLabel} · ${formatTime(item.time)}</div>`;
+        actionsHtml = `<button class="icon-btn" data-copy="${key}">Copy</button>`;
+      } else if (item.mime && item.mime.startsWith('image/')){
+        iconHtml = `<div class="item-icon"><img src="${item.content}" alt=""></div>`;
+        bodyHtml = `<div class="item-name">${escapeHtml(item.name)}</div>
+                    <div class="item-meta">${fromLabel} · ${formatBytes(item.size)} · ${formatTime(item.time)}</div>`;
+        actionsHtml = `<a class="icon-btn" href="${item.content}" download="${escapeHtml(item.name)}">Download</a>`;
+      } else {
+        iconHtml = `<div class="item-icon">⬡</div>`;
+        bodyHtml = `<div class="item-name">${escapeHtml(item.name)}</div>
+                    <div class="item-meta">${fromLabel} · ${formatBytes(item.size)} · ${formatTime(item.time)}</div>`;
+        actionsHtml = `<a class="icon-btn" href="${item.content}" download="${escapeHtml(item.name)}">Download</a>`;
+      }
+
+      actionsHtml += `<button class="icon-btn danger" data-del="${key}">Remove</button>`;
+
+      div.innerHTML = `${iconHtml}<div class="item-body">${bodyHtml}</div><div class="item-actions">${actionsHtml}</div>`;
+      container.appendChild(div);
+    }
+
+    container.querySelectorAll('[data-copy]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = itemsCache[btn.dataset.copy];
+        navigator.clipboard.writeText(item.content).then(() => {
+          btn.textContent = 'Copied';
+          setTimeout(() => btn.textContent = 'Copy', 1200);
+        }).catch(() => alert('Could not copy automatically — select the text manually.'));
+      });
+    });
+
+    container.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.del;
+        try{
+          await window.storage.delete(key, true);
+        }catch(e){ /* ignore */ }
+        delete itemsCache[key];
+        renderItems();
+      });
+    });
+  }
+
+  // ---------- rendering: chat ----------
+  function renderChat(){
+    const entries = Object.entries(chatCache).sort((a,b) => a[1].time - b[1].time);
+    const container = el('chatWindow');
+    if (entries.length === 0){
+      container.innerHTML = '<div class="empty">No messages yet — say hello.</div>';
+      return;
+    }
+    container.innerHTML = '';
+    for (const [, msg] of entries){
+      const div = document.createElement('div');
+      const mine = msg.sender === NAME;
+      div.className = 'bubble ' + (mine ? 'mine' : 'theirs');
+      div.innerHTML = `${escapeHtml(msg.text)}<span class="meta">${mine ? 'you' : escapeHtml(msg.sender)} · ${formatTime(msg.time)}</span>`;
+      container.appendChild(div);
+    }
+    scrollChatToBottom();
+  }
+
+  function scrollChatToBottom(){
+    const w = el('chatWindow');
+    w.scrollTop = w.scrollHeight;
+  }
+
+  // ---------- sending text ----------
+  el('sendTextBtn').addEventListener('click', async () => {
+    const text = el('textInput').value.trim();
+    if (!text) return;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const item = { type:'text', content:text, sender:NAME, time:Date.now() };
+    try{
+      await window.storage.set(`r:${ROOM}:item:${id}`, JSON.stringify(item), true);
+      itemsCache[`r:${ROOM}:item:${id}`] = item;
+      renderItems();
+      el('textInput').value = '';
+      triggerSignal();
+    }catch(e){
+      alert('Could not send — please try again.');
+    }
+  });
+
+  // ---------- sending files ----------
+  function readFileAsDataURL(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('read failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleFiles(fileList){
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+    const hint = el('uploadHint');
+    let sent = 0, skipped = 0;
+
+    for (const file of files){
+      if (file.size > MAX_FILE_BYTES){
+        skipped++;
+        continue;
+      }
+      hint.textContent = `Sending ${file.webkitRelativePath || file.name}…`;
+      try{
+        const dataUrl = await readFileAsDataURL(file);
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        const item = {
+          type: 'file',
+          name: file.webkitRelativePath || file.name,
+          mime: file.type,
+          size: file.size,
+          content: dataUrl,
+          sender: NAME,
+          time: Date.now()
+        };
+        await window.storage.set(`r:${ROOM}:item:${id}`, JSON.stringify(item), true);
+        itemsCache[`r:${ROOM}:item:${id}`] = item;
+        sent++;
+      }catch(e){
+        skipped++;
+      }
+    }
+    renderItems();
+    triggerSignal();
+
+    let msg = '';
+    if (sent) msg += `Sent ${sent} file${sent>1?'s':''}. `;
+    if (skipped) msg += `Skipped ${skipped} file${skipped>1?'s':''} (over 3.5MB or unreadable).`;
+    hint.textContent = msg;
+    setTimeout(() => { if (hint.textContent === msg) hint.textContent = ''; }, 5000);
+  }
+
+  el('pickFiles').addEventListener('click', () => el('fileInput').click());
+  el('pickFolder').addEventListener('click', () => el('folderInput').click());
+  el('fileInput').addEventListener('change', e => handleFiles(e.target.files));
+  el('folderInput').addEventListener('change', e => handleFiles(e.target.files));
+
+  const dz = el('dropzone');
+  ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, e => {
+    e.preventDefault(); dz.classList.add('drag');
+  }));
+  ['dragleave','drop'].forEach(evt => dz.addEventListener(evt, e => {
+    e.preventDefault(); dz.classList.remove('drag');
+  }));
+  dz.addEventListener('drop', e => {
+    if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+  });
+
+  el('refreshBtn').addEventListener('click', poll);
+
+  // ---------- chat sending ----------
+  async function sendChat(){
+    const text = el('chatInput').value.trim();
+    if (!text) return;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const msg = { sender:NAME, text, time:Date.now() };
+    try{
+      await window.storage.set(`r:${ROOM}:chat:${id}`, JSON.stringify(msg), true);
+      chatCache[`r:${ROOM}:chat:${id}`] = msg;
+      renderChat();
+      el('chatInput').value = '';
+      triggerSignal();
+    }catch(e){
+      alert('Could not send — please try again.');
+    }
+  }
+  el('chatSendBtn').addEventListener('click', sendChat);
+  el('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+  // ---------- init ----------
+  (async () => {
+    el('roomInput').value = genCode();
+    const hasConfig = await loadConfig();
+    if (hasConfig) startApp();
+  })();
+</script>
+</body>
+</html>
